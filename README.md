@@ -1,8 +1,6 @@
 # sem9
 
-## Dataset Generation
-
-This project includes a dataset generator that creates synthetic sequences with procedurally generated branching patterns (mycelium/hyphae-like structures).
+## Usage
 
 ### Prerequisites
 
