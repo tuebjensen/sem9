@@ -1,5 +1,6 @@
 # sem9
-
+The model builds on the Senseiver architecture: <https://github.com/OrchardLANL/Senseiver>
+The dataset is built on a modified version of <https://github.com/hietwll/LBM_Taichi/tree/master>
 ## Setup
 
 ```bash
