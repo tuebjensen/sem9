@@ -1,129 +1,120 @@
 import json
 import os
-import random
 
+import numpy as np
 import torch
-import torchvision.transforms.functional as TF
-from PIL import Image
 from torch.utils.data import Dataset
 
 
-class TemporallyConsistentTransform:
-    def __init__(self, image_size=336, augment=True):
-        self.image_size = image_size
-        self.augment = augment
-
-    def __call__(self, frames):
-        # Sample our parameters once for the entire subsequence
-        if self.augment:
-            rotation_angle = random.uniform(-15, 15)
-            do_hflip = random.random() < 0.5
-            brightness_factor = random.uniform(0.8, 1.2)
-            contrast_factor = random.uniform(0.8, 1.2)
-            saturation_factor = random.uniform(0.8, 1.2)
-
-        transformed_frames = []
-        for frame in frames:
-            frame = TF.resize(frame, [self.image_size, self.image_size])
-
-            if self.augment:
-                frame = TF.rotate(frame, rotation_angle)
-
-                if do_hflip:
-                    frame = TF.hflip(frame)
-
-                frame = TF.adjust_brightness(frame, brightness_factor)
-                frame = TF.adjust_contrast(frame, contrast_factor)
-                frame = TF.adjust_saturation(frame, saturation_factor)
-
-            frame = TF.to_tensor(frame)
-            # ImageNet normalization
-            frame = TF.normalize(
-                frame, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-            )
-            transformed_frames.append(frame)
-
-        return transformed_frames
-
-
-class FungiSequenceDataset(Dataset):
-    def __init__(
-        self, metadata_path, split, subsequence_length=1, stride=None, transform=None
-    ):
-        self.metadata_path = metadata_path
+class SmokeDataset(Dataset):
+    def __init__(self, dataset_root, split, downsample_factor=4):
+        self.dataset_root = dataset_root
         self.split = split
+        self.downsample_factor = downsample_factor
 
-        with open(self.metadata_path, "r") as f:
+        metadata_path = os.path.join(dataset_root, "dataset_summary.json")
+
+        with open(metadata_path, "r") as f:
             self.metadata = json.load(f)
 
-        self.frames_per_sequence = self.metadata["frames_per_sequence"]
+        self.sim_config = self.metadata["sim_config"]
+        self.snapshot_interval = self.sim_config["snapshot_interval"]
+        self.total_steps = self.sim_config["total_steps"]
+        self.width = self.sim_config["width"]
+        self.height = self.sim_config["height"]
+        self.window_size = self.snapshot_interval
+        self.downsampled_window_size = self.window_size // self.downsample_factor
 
-        assert subsequence_length >= 1, (
-            f"subsequence_length must be >= 1, got {subsequence_length}"
-        )
-        assert subsequence_length <= self.frames_per_sequence, (
-            f"subsequence_length ({subsequence_length}) cannot exceed frames_per_sequence ({self.frames_per_sequence})"
-        )
+        self.sensor_stats = self.metadata["sensor_stats"]
+        self.smoke_stats = self.metadata["smoke_stats"]
 
-        self.subsequence_length = subsequence_length
-        self.stride = stride if stride is not None else subsequence_length
+        # view as (1, 1, 2) for broadcasting over (T, 20, 2)
+        self.sensor_mean = torch.tensor(
+            self.sensor_stats["mean"], dtype=torch.float32
+        ).reshape(1, 1, 2)
+        self.sensor_std = torch.tensor(
+            self.sensor_stats["std"], dtype=torch.float32
+        ).reshape(1, 1, 2)
+        self.smoke_mean = torch.tensor(self.smoke_stats["mean"], dtype=torch.float32)
+        self.smoke_std = torch.tensor(self.smoke_stats["std"], dtype=torch.float32)
 
-        assert self.stride >= 1, f"stride must be >= 1, got {self.stride}"
-        assert self.stride <= self.subsequence_length, (
-            f"stride ({self.stride}) should be <= subsequence_length ({self.subsequence_length}) "
-            f"to ensure all frames are seen"
-        )
+        self.run_ids = self.metadata["split_indices"][split]
+        self.samples = []
 
-        augment = split == "train"
+        available_timestamps = list(range(0, self.total_steps, self.window_size))
 
-        self.transform = (
-            transform
-            if transform is not None
-            else TemporallyConsistentTransform(image_size=336, augment=augment)
-        )
+        for run_id in self.run_ids:
+            for t in available_timestamps:
+                if t - self.window_size < 0:
+                    continue
+                if t + self.window_size >= self.total_steps:
+                    continue
 
-        self.class_to_idx = {"spore": 0, "hyphae": 1, "mycelium": 2}
-        self.idx_to_class = {
-            0: "spore",
-            1: "hyphae",
-            2: "mycelium",
-        }
-
-        self.sequences = self.metadata["splits"][self.split]
-
-        self.index = []
-        for seq_idx, sequence in enumerate(self.sequences):
-            num_frames = len(sequence["frames"])
-            for start_frame in range(
-                0,
-                num_frames - self.subsequence_length + 1,
-                self.stride,
-            ):
-                self.index.append((seq_idx, start_frame))
+                self.samples.append((run_id, t))
 
     def __len__(self):
-        return len(self.index)
+        return len(self.samples)
 
     def __getitem__(self, idx):
-        seq_idx, start_frame_idx = self.index[idx]
-        sequence = self.sequences[seq_idx]
+        run_id, t = self.samples[idx]
+        run_dir = os.path.join(self.dataset_root, self.split, f"run_{run_id:04d}")
 
-        frames = []
-        class_labels = []
-        timestamps = []
+        with np.load(os.path.join(run_dir, "metadata.npz")) as meta_data:
+            mask = meta_data["mask"].astype(np.float32).T
+            sensor_pos_raw = meta_data["sensor_positions"]
+            all_readings = meta_data["sensor_readings"]
 
-        for i in range(self.subsequence_length):
-            frame_info = sequence["frames"][start_frame_idx + i]
-            frame = Image.open(frame_info["frame_path"]).convert("RGB")
-            frames.append(frame)
-            class_label = self.class_to_idx[frame_info["class_label"]]
-            class_labels.append(class_label)
-            timestamps.append(frame_info["transition_ratio"])
+        # History: [t - 99, t] (downsampled by 4)
+        history_indices = np.linspace(
+            t - self.window_size + self.downsample_factor,
+            t,
+            num=self.downsampled_window_size,
+            dtype=int,
+        )
+        sensor_history_np = all_readings[history_indices].transpose(1, 0, 2)
 
-        frames = self.transform(frames)
+        # Future: [t + 1, t + 100] (downsampled by 4)
+        future_indices = np.linspace(
+            t + self.downsample_factor,
+            t + self.window_size,
+            num=self.downsampled_window_size,
+            dtype=int,
+        )
+        sensor_future_np = all_readings[future_indices].transpose(1, 0, 2)
+
+        sensor_history = torch.from_numpy(sensor_history_np).float()
+        sensor_future = torch.from_numpy(sensor_future_np).float()
+
+        sensor_history = (sensor_history - self.sensor_mean) / self.sensor_std
+        sensor_future = (sensor_future - self.sensor_mean) / self.sensor_std
+
+        curr_img_path = os.path.join(run_dir, f"raw_data/smoke_{t:05d}.npy")
+        curr_smoke_np = np.load(curr_img_path).astype(np.float32).T
+
+        target_t = t + self.window_size
+        target_img_path = os.path.join(run_dir, f"raw_data/smoke_{target_t:05d}.npy")
+        target_smoke_np = np.load(target_img_path).astype(np.float32).T
+
+        curr_smoke = torch.from_numpy(curr_smoke_np).float()
+        target_smoke = torch.from_numpy(target_smoke_np).float()
+
+        curr_smoke = (curr_smoke - self.smoke_mean) / self.smoke_std
+        target_smoke = (target_smoke - self.smoke_mean) / self.smoke_std
+
+        input_image = torch.stack([curr_smoke, torch.from_numpy(mask).float()], dim=0)
+        target_image = target_smoke.unsqueeze(0)
+
+        aspect_ratio = self.width / self.height
+        norm_sensor_pos = np.zeros_like(sensor_pos_raw, dtype=np.float32)
+        norm_sensor_pos[:, 0] = (
+            (sensor_pos_raw[:, 0] / self.width) * 2 - 1
+        ) * aspect_ratio
+        norm_sensor_pos[:, 1] = (sensor_pos_raw[:, 1] / self.height) * 2 - 1
+
         return {
-            "frames": torch.stack(frames),
-            "class_labels": torch.tensor(class_labels, dtype=torch.long),
-            "timestamps": torch.tensor(timestamps, dtype=torch.float32),
-            "sequence_id": sequence["sequence_id"],
+            "sensor_pos": torch.from_numpy(norm_sensor_pos).float(),
+            "sensor_history_vals": sensor_history,
+            "current_image": input_image,
+            "sensor_target_vals": sensor_future,
+            "target_image": target_image,
         }

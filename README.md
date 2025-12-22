@@ -1,12 +1,6 @@
 # sem9
 
-## Dataset Generation
-
-This project includes a dataset generator that creates synthetic sequences with procedurally generated branching patterns (mycelium/hyphae-like structures).
-
-### Prerequisites
-
-Create a virtual environment and install the required dependencies:
+## Setup
 
 ```bash
 cd ws
@@ -15,11 +9,20 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Running the Dataset Generator
-
-To create a dataset, run:
+## Generate dataset
 
 ```bash
-cd ws
-python create_dataset.py
+python smoke_simulator.py
+```
+
+## Train Model
+
+```bash
+python train.py
+```
+
+## Evaluate
+
+```bash
+python evaluate.py
 ```

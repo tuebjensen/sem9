@@ -177,3 +177,9 @@ cython_debug/
 
 # Data
 data/
+smoke_simulation_data*/
+lightning_logs*/
+eval_results*/
+
+
+logs/

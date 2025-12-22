@@ -1,0 +1,16 @@
+{    
+    "width": 192,
+    "height": 128,
+    "viscosity": 0.015,
+    "diffusivity": 0.01,
+    "num_sensors": 20,
+    "total_steps": 5000,
+    "snapshot_interval": 100,
+    "seed": 42,
+    "num_runs": 1000,
+    "train_ratio": 0.8,
+    "val_ratio": 0.1,
+    "test_ratio": 0.1,
+    "inlet_profile_type": "constant",
+    "output_root": "smoke_simulation_data"
+}

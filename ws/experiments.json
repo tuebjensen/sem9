@@ -1,0 +1,77 @@
+{"experiments": [
+    {
+        "run_name": "baseline_bilinear_l1",
+        "image_head_type": "baseline",
+        "upsampling_type": "bilinear",
+        "image_loss_type": "l1"
+    },
+    {
+        "run_name": "baseline_bilinear_mse",
+        "image_head_type": "baseline",
+        "upsampling_type": "bilinear",
+        "image_loss_type": "mse"
+    },
+    {
+        "run_name": "baseline_nearest_l1",
+        "image_head_type": "baseline",
+        "upsampling_type": "nearest",
+        "image_loss_type": "l1"
+    },
+    {
+        "run_name": "baseline_nearest_mse",
+        "image_head_type": "baseline",
+        "upsampling_type": "nearest",
+        "image_loss_type": "mse"
+    },
+
+    {
+        "run_name": "2_step_upsampling_bilinear_l1",
+        "image_head_type": "2_step_upsampling",
+        "upsampling_type": "bilinear",
+        "image_loss_type": "l1"
+    },
+    {
+        "run_name": "2_step_upsampling_bilinear_mse",
+        "image_head_type": "2_step_upsampling",
+        "upsampling_type": "bilinear",
+        "image_loss_type": "mse"
+    },
+    {
+        "run_name": "2_step_upsampling_nearest_l1",
+        "image_head_type": "2_step_upsampling",
+        "upsampling_type": "nearest",
+        "image_loss_type": "l1"
+    },
+    {
+        "run_name": "2_step_upsampling_nearest_mse",
+        "image_head_type": "2_step_upsampling",
+        "upsampling_type": "nearest",
+        "image_loss_type": "mse"
+    },
+
+    {
+        "run_name": "4_step_upsampling_bilinear_l1",
+        "image_head_type": "4_step_upsampling",
+        "upsampling_type": "bilinear",
+        "image_loss_type": "l1"
+    },
+    {
+        "run_name": "4_step_upsampling_bilinear_mse",
+        "image_head_type": "4_step_upsampling",
+        "upsampling_type": "bilinear",
+        "image_loss_type": "mse"
+    },
+    {
+        "run_name": "4_step_upsampling_nearest_l1",
+        "image_head_type": "4_step_upsampling",
+        "upsampling_type": "nearest",
+        "image_loss_type": "l1"
+    },
+    {
+        "run_name": "4_step_upsampling_nearest_mse",
+        "image_head_type": "4_step_upsampling",
+        "upsampling_type": "nearest",
+        "image_loss_type": "mse"
+    }
+
+]}
